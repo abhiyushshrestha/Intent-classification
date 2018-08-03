@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Aug  3 10:39:41 2018
+
+@author: abhiyush
+"""
+
+import numpy as np
+import pandas as pd
+import nltk
+import re
+import pickle
+
+
+from nltk.stem import PorterStemmer
+from nltk.stem import WordNetLemmatizer
+from sklearn.metrics import confusion_matrix
+
+
+datasets = pd.read_csv("/home/abhiyush/mPercept/Natural Language Processing/Intent detection/datasets/training_intent_datasets.csv")
+datasets
+
+lemmatizer = WordNetLemmatizer()
+corpus = []
+
+for i in range(0,len(datasets)):
+    sentence = re.sub('[^a-zA-Z]',' ', datasets['sentence'][i])
+    #sentence = nltk.word_tokenize(datasets['sentence'][i])
+    sentence = sentence.lower()
+    sentence = sentence.split() #sentence = nltk.word_tokenize(datasets['sentence'][i])
+    sentence = [lemmatizer.lemmatize(word) for word in sentence]
+    sentence = ' '.join(sentence)
+    corpus.append(sentence)
+
+data = pd.DataFrame({'sentence':corpus, 'class' : datasets['class']})    
+    
+#creating the list of the dictionary
+training_data = []
+for i in range(0,len(data)):
+    training_data.append({
+            'class' : data.loc[i,'class'],
+            'sentence' : data.loc[i,'sentence']
+            })
+
+print("%d sentences of training data" %len(training_data))
+
+
+
+class_words = {}
+
+#taking a value of a key 'class' from training data and conveting it into sets so as to
+# to make them unique and again conveting it into the list
+classes = list(set([c['class'] for c in training_data]))
+
+#making empty dictionary list for keys
+for c in classes:
+    class_words[c] = []
+ 
+corpus_words = {}    
+
+# to count the occurance of each word 
+for data in training_data:
+    for word in nltk.word_tokenize(data['sentence']):
+        print(word)
+        
+        if word not in corpus_words:
+            corpus_words[word] = 1
+        else:
+            corpus_words[word] += 1
+            
+        class_words[data['class']].extend([word])
+            
+print("The count of each words in training datasets :/n", corpus_words)
+print("The tokens for each classes are : /n", class_words)
+
+save_class_words = open('/home/abhiyush/mPercept/Natural Language Processing/Intent detection/class_words.pickle', 'wb')
+pickle.dump(class_words, save_class_words)
+save_class_words.close()
+
+sentence = "Hello, how are you?"
+sentence = "take care"
+
+def calculate_jaccard_similarity(sentence, class_name):
+    test_word = []
+    for word in nltk.word_tokenize(sentence):
+        test_word.append(lemmatizer.lemmatize(word).lower())
+    a = set(test_word) 
+    b = set(class_words[class_name])
+    c = a.intersection(b)
+    return float(len(c)) / (len(a) + len(b) - len(c))
+
+
+def classify(sentence):
+    high_jaccard_score = 0
+    high_class = None
+    score = 0
+    
+    for class_name in class_words.keys():
+        score = calculate_jaccard_similarity(sentence, class_name)
+        
+        if(score > high_jaccard_score):
+            high_jaccard_score = score
+            high_class = class_name
+            
+    return high_class, high_jaccard_score
+
+# testing the model with data sets
+    
+classify("take care")
+classify("The day is beautiful today")
+classify("Who are you?")
+classify("Hi")
+classify("Whats up?")
+classify("How do you do?")
+classify("talk to you later")
+classify("bye bye!!!")
+classify("Sweet dreams")
+classify("I need to go")
+classify("Could you please tell me menu for today")
+classify("Our order should be ready by now, right")
+classify("all good?")   
+classify("take care")
+classify("How is your life")
+classify("Hey dude")
+classify("whatzz up bro!!!")
+
+
+#To check the accuracy of the model
+test_data_sets = pd.read_csv("/home/abhiyush/mPercept/Natural Language Processing/Intent detection/datasets/test_intent_datasets.csv")
+test_data_sets
+
+#converting categorical to numeric
+numeric_mapper = {
+        "class" : {"greeting" : 1, "goodbye" : 2, "order" : 3}
+        }
+
+test = test_data_sets.replace(numeric_mapper)
+test_class = test['class']
+type(test_class)
+
+pred = []
+
+for sen in test['sentence']:
+    y_class, y_score = classify(sen)
+    pred.append(y_class)
+
+pred_class = pd.DataFrame(pred, columns = ['class'])
+
+pred_class = pred_class.replace(numeric_mapper)
+
+cm = confusion_matrix(test_class, pred_class)
+cm
+
+accuracy = (cm[0, 0] + cm[1, 1] + cm[2, 2])/cm.sum() * 100
+print("The accuracy of the model is: ", accuracy)
+
+
